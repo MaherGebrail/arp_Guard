@@ -1,0 +1,9 @@
+[Unit]
+Description=ARPGuard
+
+[Service]
+Type=simple
+ExecStart=/opt/arp_guard/ARP_Guard.py
+
+[Install]
+WantedBy=multi-user.target
