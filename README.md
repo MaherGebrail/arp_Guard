@@ -6,7 +6,7 @@ _It works as a service in linux (as it built for debian) .. to guard ARP table a
 
 * **ARP_Guard.py** .. I find it well explained (by comments) from inside if you want to change something.
 
-	* it keeps reading the arp table .. if something changed and unique it makes it static .. else .. the app blacklist it.
+	* it keeps reading the arp table .. if something changed and unique it makes it static allowed in arptables .. else .. the app blacklist it.
 	* if **familiar_macs** has values .. it will alert for strangers macs,ips .. anyway the app will warn about spoofing macs in the warning path. 
 > Note: the default warning path is "/opt/arp_guard/arp_warnings" .. but you can change it by adding your paths in **my_paths** list.
 
