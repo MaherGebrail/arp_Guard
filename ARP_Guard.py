@@ -1,12 +1,11 @@
-#!/usr/bin/python3
-from datetime import datetime 
+#!/usr/bin/env python3
+from datetime import datetime
 import os
 import time
 
-
 # dict to add your familiar macs if you are in closed lan and want alerts if any stranger appears on pc's arp_table:
-	#ex: familiar_macs = {"my-pc": "aa:bb:cc:dd:ee:ff"} 
-#else leave it empty to stop annoying you from(stranger warnings)
+# ex: familiar_macs = {"my-pc": "aa:bb:cc:dd:ee:ff"}
+# else leave it empty to stop annoying you from(stranger warnings)
 familiar_macs = {}
 
 blackListed = []
@@ -20,7 +19,7 @@ def create_warning_path(paths_=None):
     if not paths_:
         if not os.path.isdir('/opt/arp_warnings/'):
             os.system('mkdir /opt/arp_guard/arp_warnings')
-        paths_ = ['/opt/arp_guard/arp_warnings/'] # default warning dir
+        paths_ = ['/opt/arp_guard/arp_warnings/']  # default warning dir
 
     spoofs_path = []
     strangers_paths = []
@@ -91,15 +90,17 @@ def checkAndAct(list_):
         else:
             statics.append(i)
 
+    got_blacklisted = False
+
     for i in to_del:  # loop to prevent macs and echo warnings
         got = {list_[1][i]: list_[0][i]}
         if got not in state_list and got not in blackListed:
-            
             # blacklist a mac
             os.system(f"arptables -A INPUT -s {list_[1][i]} --source-mac {list_[0][i]} --opcode 2 -j DROP")
             write_warnings(f"{list_[1][i]} : {list_[0][i]} tried-to-spoof-you -at- {datetime.now()}\n",
                            list_of_warnings_paths)
             blackListed.append(got)
+            got_blacklisted = True
 
     if statics:  # if new unique macs it puts them statics
         for i in range(len(statics)):
@@ -108,6 +109,9 @@ def checkAndAct(list_):
                 # make a mac static
                 os.system(f"arptables -A INPUT -s {list_[1][i]} --source-mac {list_[0][i]} -j ACCEPT")
                 state_list.append(got)
+
+    if got_blacklisted:
+        os.system("ip -s -s neigh flush all")
 
 
 while True:
