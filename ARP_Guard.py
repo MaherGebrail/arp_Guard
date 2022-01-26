@@ -17,7 +17,7 @@ def create_warning_path(paths_=None):
     """It Creates the files names for both files ( strangers and spoofing )"""
 
     if not paths_:
-        if not os.path.isdir('/opt/arp_warnings/'):
+        if not os.path.isdir('/opt/arp_guard/arp_warnings/'):
             os.system('mkdir /opt/arp_guard/arp_warnings')
         paths_ = ['/opt/arp_guard/arp_warnings/']  # default warning dir
 
@@ -40,80 +40,77 @@ def write_warnings(message, paths_list):
 
 path_of_arp_table = "/proc/net/arp"  # only change it if the arp file path changed and this file hasn't updated !!
 
-my_paths = []  # you can add here your paths for warning files ex:['/home/user1/Desktop/', '/home/user2/'] .. or let it be empty list.
+# you can add here your paths for warning files ex:['/home/user1/Desktop/', '/home/user2/'] .. or let it be empty list.
+my_paths = []
 list_of_warnings_paths, list_of_strangers_paths = create_warning_path(my_paths)
 
 
-def get_mac_lists():
+def get_macs_ips():
     """This Function returns tuple of (macs, ips) lists"""
     macs = []
     ips = []
     with open(path_of_arp_table, "r") as f:
         getArp = f.readlines()
 
-    for a in getArp:
-        a = a.replace("\t", " ").split(" ")
+    for line in getArp:
+        line = set(line.replace("\t", " ").split(" "))
 
-        for z in range(a.count(" ") + a.count('')):
-            try:
-                a.remove(" ")
-            except ValueError:
-                a.remove('')
         try:
-            if a[0].count(".") == 3 or a[0] == "_gateway":
-                macs.append(a[3])  # macs
-                ips.append(a[0])  # ips
+            mac, ip = [mac for mac in line if mac.count(':') == 5][0], \
+                      [ip for ip in line if ip.count('.') == 3][0]
+
+            macs.append(mac)  # macs
+            ips.append(ip)  # ips
         except IndexError:
             pass
     return macs, ips
 
 
-def checkAndAct(list_):
+def checkAndAct(tuple_macs_ips: tuple):
     """Takes input the tuple of lists(macs, ips) return None"""
-    to_del = []  # list of what should be prevented
-    statics = []  # list of what should be static
+    to_del = []  # list of indexes that should be prevented
+    statics = []  # list of indexes that should be static
 
-    for i in range(len(list_[0])):  # loop to filter macs weather familiar or spoofing or statics
+    macs, ips = tuple_macs_ips
 
-        if list_[0][i] == "00:00:00:00:00:00":
+    for i in range(len(macs)):  # loop to filter macs whether familiar or spoofing or statics
+
+        if macs[i] == "00:00:00:00:00:00":
             continue
 
-        # if familiar macs are there, it will warning about strangers
-        if familiar_macs and list_[0][i] not in list(familiar_macs.values()):
-            if list_[0][i] not in strangers:
-                strangers.append(list_[0][i])
-                write_warnings(f"{list_[1][i]} : {list_[0][i]} Connected in LAN -at- {datetime.now()}\n",
+        # if familiar macs are there, it will warn about strangers
+        if familiar_macs and macs[i] not in list(familiar_macs.values()):
+            if macs[i] not in strangers:
+                strangers.append(macs[i])
+                write_warnings(f"{ips[i]} : {macs[i]} Connected in LAN -at- {datetime.now()}\n",
                                list_of_strangers_paths)
 
-        if list_[0].count(list_[0][i]) >= 2:
+        if macs.count(macs[i]) >= 2:
             to_del.append(i)
         else:
             statics.append(i)
 
     got_blacklisted = False
 
-    for i in to_del:  # loop to prevent macs and echo warnings
-        got = {list_[1][i]: list_[0][i]}
+    for i in to_del:  # if mac spoofed > prevent macs and echo warnings
+        got = {ips[i]: macs[i]}
         if got not in state_list and got not in blackListed:
-            # blacklist a mac
-            os.system(f"arptables -A INPUT -s {list_[1][i]} --source-mac {list_[0][i]} --opcode 2 -j DROP")
-            write_warnings(f"{list_[1][i]} : {list_[0][i]} tried-to-spoof-you -at- {datetime.now()}\n",
+            os.system(f"arptables -A INPUT -s {ips[i]} --source-mac {macs[i]} --opcode 2 -j DROP")  # blacklist a mac
+            write_warnings(f"{ips[i]} : {macs[i]} tried-to-spoof-you -at- {datetime.now()}\n",
                            list_of_warnings_paths)
             blackListed.append(got)
             got_blacklisted = True
 
-    if statics:  # if new unique macs it puts them statics
-        for i in range(len(statics)):
-            got = {list_[1][i]: list_[0][i]}
-            if got not in state_list and got not in blackListed:
-                # make a mac static
-                os.system(f"arptables -A INPUT -s {list_[1][i]} --source-mac {list_[0][i]} -j ACCEPT")
-                state_list.append(got)
+    for i in range(len(statics)):  # if new unique macs -> it puts them statics
+        got = {ips[i]: macs[i]}
+        if got not in state_list and got not in blackListed:
+            os.system(f"arptables -A INPUT -s {ips[i]} --source-mac {macs[i]} -j ACCEPT")  # make a mac static
+            state_list.append(got)
 
     if got_blacklisted:
         os.system("ip -s -s neigh flush all")
 
 
 while True:
-    checkAndAct(get_mac_lists())
+    checkAndAct(get_macs_ips())
     time.sleep(1)
