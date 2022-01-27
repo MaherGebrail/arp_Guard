@@ -66,16 +66,21 @@ def get_macs_ips():
     return macs, ips
 
 
-def checkAndAct(tuple_macs_ips: tuple):
-    """Takes input the tuple of lists(macs, ips) return None"""
+def checkAndAct(tuple_macs_ips: tuple, force_static=True):
+    """tuple_macs_ips: tuple of lists(macs, ips).
+        force_static: Boolean value, if true -> app will be less flexible as it'll not accept change of macs for ips.
+        return None."""
     to_del = []  # list of indexes that should be prevented
     statics = []  # list of indexes that should be static
 
     macs, ips = tuple_macs_ips
+    list_checked_macs = [v for d in state_list + blackListed for v in d.values()]
+    list_checked_ips = [k for d in state_list + blackListed for k in d.keys()]
 
     for i in range(len(macs)):  # loop to filter macs whether familiar or spoofing or statics
 
-        if macs[i] == "00:00:00:00:00:00":
+        got = {ips[i]: macs[i]}
+        if got in state_list + blackListed or macs[i] == "00:00:00:00:00:00":
             continue
 
         # if familiar macs are there, it will warn about strangers
@@ -85,6 +90,11 @@ def checkAndAct(tuple_macs_ips: tuple):
                 write_warnings(f"{ips[i]} : {macs[i]} Connected in LAN -at- {datetime.now()}\n",
                                list_of_strangers_paths)
 
+        if force_static:
+            if got not in state_list + blackListed:
+                if macs[i] in list_checked_macs or ips[i] in list_checked_ips:
+                    to_del.append(i)
+
         if macs.count(macs[i]) >= 2:
             to_del.append(i)
         else:
@@ -92,9 +102,9 @@ def checkAndAct(tuple_macs_ips: tuple):
 
     got_blacklisted = False
 
-    for i in to_del:  # if mac spoofed > prevent macs and echo warnings
+    for i in set(to_del):  # if mac spoofed > prevent macs and echo warnings
         got = {ips[i]: macs[i]}
-        if got not in state_list and got not in blackListed:
+        if got not in state_list + blackListed:
             os.system(f"arptables -A INPUT -s {ips[i]} --source-mac {macs[i]} --opcode 2 -j DROP")  # blacklist a mac
             write_warnings(f"{ips[i]} : {macs[i]} tried-to-spoof-you -at- {datetime.now()}\n",
                            list_of_warnings_paths)
@@ -103,7 +113,7 @@ def checkAndAct(tuple_macs_ips: tuple):
 
     for i in range(len(statics)):  # if new unique macs -> it puts them statics
         got = {ips[i]: macs[i]}
-        if got not in state_list and got not in blackListed:
+        if got not in state_list + blackListed:
             os.system(f"arptables -A INPUT -s {ips[i]} --source-mac {macs[i]} -j ACCEPT")  # make a mac static
             state_list.append(got)
 
