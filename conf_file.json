@@ -1,0 +1,39 @@
+{
+    "_overall comment_": "you may need to change the 'data' section in objs => to customize how this script works.",
+    "familiar_macs": {
+        "_comment_of_usage_": [
+            "data is a [dict] .. to add your familiar macs if you are in closed LAN and want alerts if any stranger pc appears on arp table",
+            "ex: data : {'my-pc': 'aa:bb:cc:dd:ee:ff', 'other_known_pc':'cc:aa:bb:ff:ee:dd'}",
+            "else leave it empty to stop annoying you from(stranger warnings)"
+        ],
+        "data": {}
+    },
+    "path_of_arp_table": {
+        "_comment_of_usage_": "path is [str] .. you may never need to change the path of arp file .. but just in case, data section holds it for you",
+        "data": "/proc/net/arp"
+    },
+    "my_warning_paths": {
+        "_comment_of_usage_": [
+            "A [list] of paths for warning files ex:'data':['/home/user1/Desktop', '/home/user2'], or let it be an empty list.",
+            "if it was empty .. the warnings will be at the script's path inside arp_warnings dir"
+        ],
+        "data": []
+    },
+    "path_of_current_log": {
+        "_comment_of_usage_": [
+            "This is a [str] path of logging Current-process of function [log_current_process] ... There are 3 Options",
+            "[1 - let it empty -> log in (Logging)dir in the same folder of script]",
+            "[2 - 'data':'NO_LOG' -> no logging produced]",
+            "[3 - str of desired logging path]"
+        ],
+        "data": ""
+    },
+    "force_static": {
+        "_comment_of_usage_": [
+            "force_static is a [boolean] value",
+            "if [data] is true : The script will be less flexible BUT more efficient as it'll not ACCEPT changes of used (macs or ips), Since all the recorded(macs,ips) for first time will be static.",
+            "if [data] is false :  The script will accept new pcs with used (mac or ip), if it'not currently exists in arp table. "
+        ],
+        "data": true
+    }
+}

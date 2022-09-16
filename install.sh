@@ -5,6 +5,7 @@ if [ $USER = "root" ] ;then
 	mkdir /opt/arp_guard
 
 	cp ARP_Guard.py /opt/arp_guard/
+	cp conf_file.json /opt/arp_guard/
 
 	cp arpGuard.service /etc/systemd/system/
 

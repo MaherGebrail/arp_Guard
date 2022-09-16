@@ -5,23 +5,22 @@ import os
 import time
 
 
-def create_logging_paths(paths_=None, only_date=False):
-    """It Returns a dict of files names for both ( strangers and spoofing ) OR date of today"""
+def create_warnings_logging_paths(warning_paths=None):
+    """It Returns a dict of files names for both ( strangers and spoofing )"""
 
-    date_today = str(datetime.now().year) + "_" + str(datetime.now().month) + "_" + str(datetime.now().day)
-    if only_date:
-        return date_today
-    if not paths_:
-        if not os.path.isdir(path_script+'arp_warnings/'):
-            os.system(f""" mkdir "{path_script}arp_warnings" """)
-        paths_ = [f"{path_script}arp_warnings/"]  # default warning dir as install.sh is '/opt/arp_guard/arp_warnings/'
+    date_today = datetime.now().strftime("%Y_%m_%d")
+    if not warning_paths:
+        path_warning = os.path.join(path_script, "arp_warnings")
+        if not os.path.isdir(path_warning):
+            os.system(f""" mkdir "{path_warning}" """)
+        warning_paths = [path_warning]  # default warning dir as install.sh is '/opt/arp_guard/arp_warnings/'
 
     spoofs_path = []
     strangers_paths = []
 
-    for i in paths_:
-        spoofs_path.append(i + "MacSpoof_warning_" + date_today)
-        strangers_paths.append(i + "strangers_warning_" + date_today)
+    for w_path_dir in warning_paths:
+        spoofs_path.append(os.path.join(w_path_dir, "MacSpoof_warning_" + date_today + '.txt'))
+        strangers_paths.append(os.path.join(w_path_dir, "strangers_warning_" + date_today + '.txt'))
     return {'spoofs': spoofs_path, 'strangers': strangers_paths}
 
 
@@ -37,9 +36,9 @@ def get_macs_ips():
     macs = []
     ips = []
     with open(path_of_arp_table, "r") as f:
-        getArp = f.readlines()
+        get_arp = f.readlines()
 
-    for line in getArp:
+    for line in get_arp:
         line = set(line.replace("\t", " ").split(" "))
 
         try:
@@ -53,9 +52,9 @@ def get_macs_ips():
     return macs, ips
 
 
-def checkAndAct(tuple_macs_ips: tuple, force_static=True):
+def check_and_act(tuple_macs_ips: tuple, force_static=True):
     """tuple_macs_ips: tuple of lists(macs, ips).
-        force_static: Boolean value, if true -> app will be less flexible as it'll not accept change of macs for ips.
+        force_static: Boolean value (declared in the conf_file.json).
         return None."""
     to_del = []  # list of indexes that should be prevented
     statics = []  # list of indexes that should be static
@@ -71,12 +70,12 @@ def checkAndAct(tuple_macs_ips: tuple, force_static=True):
         if got in stat_list + blackListed or macs[i] == "00:00:00:00:00:00":
             continue
 
-        # if familiar macs are there, it will warn about strangers
+        # if familiar macs has been written in conf file, it will warn about strangers
         if familiar_macs and macs[i] not in list(familiar_macs.values()):
             if macs[i] not in strangers:
                 strangers.append(macs[i])
-                write_warnings(f"{ips[i]} : {macs[i]} Connected in LAN -at- {datetime.now()}\n",
-                               create_logging_paths(my_paths)['strangers'])
+                write_warnings(f"{ips[i]} : {macs[i]} Connected in LAN at {datetime.now().strftime('%I%p:%M:%S')}\n",
+                               create_warnings_logging_paths(my_warning_paths)['strangers'])
                 rewrite_log = True
 
         if force_static:
@@ -95,13 +94,13 @@ def checkAndAct(tuple_macs_ips: tuple, force_static=True):
         got = {ips[i]: macs[i]}
         if got not in stat_list + blackListed:
             os.system(f"arptables -A INPUT -s {ips[i]} --source-mac {macs[i]} --opcode 2 -j DROP")  # blacklist a mac
-            write_warnings(f"{ips[i]} : {macs[i]} tried-to-spoof-you -at- {datetime.now()}\n",
-                           create_logging_paths(my_paths)['spoofs'])
+            write_warnings(f"{ips[i]} : {macs[i]} tried-to-spoof-you at "
+                           f"{datetime.now().strftime('%I%p:%M:%S')}\n", create_warnings_logging_paths(my_warning_paths)['spoofs'])
             blackListed.append(got)
             got_blacklisted = True
             rewrite_log = True
 
-    for i in range(len(statics)):  # if new unique macs -> it puts them statics
+    for i in set(statics):  # if new unique macs -> it puts them statics
         got = {ips[i]: macs[i]}
         if got not in stat_list + blackListed:
             os.system(f"arptables -A INPUT -s {ips[i]} --source-mac {macs[i]} -j ACCEPT")  # make a mac static
@@ -125,42 +124,48 @@ def log_current_process(needed_path=''):
             return
         path_log = needed_path
     else:
-        if not os.path.isdir(path_script+'Logging/'):
-            os.system(f"""mkdir "{path_script}Logging" """)
-        path_log = path_script+'Logging/'
+        path_log = os.path.join(path_script, 'Logging')
+        if not os.path.isdir(path_log):
+            os.system(f"""mkdir "{path_log}" """)
 
     to_log = {
+        "last_time_updated": datetime.now().strftime("%Y-%m-%d_%I%p:%M:%S"),
         "BlackListed": blackListed,
         "statics": stat_list
     }
+
     if familiar_macs:
         to_log['Strangers'] = strangers
-    with open(path_log+"logging_"+create_logging_paths(only_date=True)+'.json', 'w') as f:
-        f.write(json.dumps(to_log))
+
+    with open(os.path.join(path_log, "current_log.json"), 'w') as f:
+        json.dump(to_log, f, indent=4)
 
 
-path_script = os.path.abspath(os.path.dirname(__file__))+'/'
+def get_conf_data(json_conf_file):
+    with open(json_conf_file) as jf:
+        conf_data = json.load(jf)
+    return conf_data
 
-# dict to add your familiar macs if you are in closed LAN and want alerts if any stranger pc appears on arp_table:
-# ex: familiar_macs = {"my-pc": "aa:bb:cc:dd:ee:ff"}
-# else leave it empty to stop annoying you from(stranger warnings)
-familiar_macs = {}
+
+path_script = os.path.abspath(os.path.dirname(__file__))
 
 blackListed = []  # The blacklisted [{ips:macs}].
 stat_list = []  # [{ips:macs}] has been set to be statics.
 strangers = []  # [macs] of stranger devices (if familiar_macs contains values)
 
-path_of_arp_table = "/proc/net/arp"  # only change it if the arp file path changed.
-
-# you can add here your paths for warning files ex:['/home/user1/Desktop/', '/home/user2/'], or let it be an empty list.
-my_paths = []
-
-# This is the path of logging Current-process of function [log_current_process]
-# There are 3 Options : [1 - let it empty -> log in (Logging)dir in the same folder of script]
-# [2 - path_of_current_log='NO_LOG' -> no logging produced] [3 - str of desired logging path]
-path_of_current_log = ''
-
 if __name__ == '__main__':
+
+    json_conf_file_path = os.path.join(path_script, 'conf_file.json')
+    data = get_conf_data(json_conf_file_path)
+
+    familiar_macs = data['familiar_macs']['data']
+
+    path_of_arp_table = data['path_of_arp_table']['data']
+
+    my_warning_paths = data['my_warning_paths']['data']
+
+    path_of_current_log = data['path_of_current_log']['data']
+
     while True:
-        checkAndAct(get_macs_ips(), force_static=True)
+        check_and_act(get_macs_ips(), force_static=data['force_static']['data'])
         time.sleep(1)
